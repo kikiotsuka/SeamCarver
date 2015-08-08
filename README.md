@@ -7,7 +7,7 @@ https://en.wikipedia.org/wiki/Seam_carving
 
 # Dependencies
 
-python 3.4, pillow 2.9
+CImg 1.6.3, ImageMagick
 
 # Usage
 
