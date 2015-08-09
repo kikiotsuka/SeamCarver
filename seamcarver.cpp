@@ -6,6 +6,8 @@
 #include <cfloat>
 #include <cmath>
 
+#include <fstream> //TODO remove me debug
+
 #include "CImg.h"
 
 double luminosity(int r, int g, int b);
@@ -59,10 +61,45 @@ int main(int argc, char** argv) {
         gradient_map.push_back(a);
     }
 
+    //DEBUG
+    double minval = DBL_MAX;
+    double maxval = -1;
+    for (int i = 0; i < gradient_map.size(); i++) {
+        for (int j = 0; j < gradient_map[i].size(); j++) {
+            double curr = gradient_map[i][j].second;
+            if (curr < minval) minval = curr;
+            if (curr > maxval) maxval = curr;
+        }
+    }
+
+    std::cout << gradient_map.size() << ", " << gradient_map[0].size() << "\n";
+    
+    cimg_library::CImg<unsigned char> mono(image.width(), image.height(), 1, 3);
+    for (int i = 0; i < gradient_map.size(); i++) {
+        for (int j = 0; j < gradient_map[0].size(); j++) {
+            double curr = gradient_map[i][j].second;
+            double scale = (255 - 0) / (maxval - minval) * (curr - minval) + 0;
+            unsigned char color[3] = {scale, scale, scale};
+            mono.draw_point(j, i, 0, color);
+        }
+    }
+    mono.display();
+    return 0;
+    //DEBUG END
+
     std::cout << "Calculating seams" << "\n";
     for (int i = 0; i < gradient_map.back().size(); i++) {
         calculate_seam(gradient_map, gradient_map.size() - 1, i);
     }
+
+    std::ofstream fout("output.txt");
+    for (int i = 0; i < gradient_map.size(); i++) {
+        for (int j = 0; j < gradient_map[i].size(); j++) {
+            fout << gradient_map[i][j].second << " ";
+        }
+        fout << "\n";
+    }
+    fout.close();
 
     /*
     for (int i = 0; i < gradient_map.size(); i++) {
