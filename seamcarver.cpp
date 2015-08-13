@@ -5,6 +5,7 @@
 #include <utility>
 #include <cfloat>
 #include <cmath>
+#include <cstdlib>
 
 #include "CImg.h"
 
@@ -14,13 +15,11 @@ bool valid_coord(std::pair<int, int> coord, int width, int height);
 std::vector<std::vector<double> > calculate_luminosity(cimg_library::CImg<unsigned char> &image);
 std::vector<std::vector<std::pair<double, double> > > calculate_gradient(std::vector<std::vector<double> > luminosity_map);
 double calculate_seam(std::vector<std::vector<std::pair<double, double> > > &gradient_map, int x, int y);
-std::vector<std::pair<int, int> > trace_seam(cimg_library::CImg<unsigned char> &image,
-                                  std::vector<std::vector<std::pair<double, double> > > gradient_map,
-                                  std::pair<double, double> search);
+std::vector<std::pair<int, int> > trace_seam(std::vector<std::vector<std::pair<double, double> > > gradient_map, int index);
 
 int main(int argc, char** argv) {
-    if (argc < 2) {
-        std::cout << "Error: Please specify image name" << "\n";
+    if (argc < 3) {
+        std::cout << "Not enough arguments, Usage: ./seamcarver <path_to_image> <number_of_seams_to_carve>" << "\n";
         return 1;
     }
 
@@ -36,78 +35,37 @@ int main(int argc, char** argv) {
         std::vector<std::vector<char> > row;
         for (int j = 0; j < image.width(); j++) {
             std::vector<char> color;
-            color.push_back(image.atXY(i, j, 0, 0));
-            color.push_back(image.atXY(i, j, 0, 1));
-            color.push_back(image.atXY(i, j, 0, 2));
+            color.push_back(image.atXY(j, i, 0, 0));
+            color.push_back(image.atXY(j, i, 0, 1));
+            color.push_back(image.atXY(j, i, 0, 2));
             row.push_back(color);
         }
         im_vec.push_back(row);
     }
 
-    int numseam = 421;
+    int numseam = atoi(argv[2]);
     for (int master = 0; master < numseam; master++) {
-        std::cout << "=====" << "\n";
-        std::cout << "Iteration: " << master + 1 << "\n";
+        std::cout << "Computing and removing seam #" << master + 1 << "\n";
 
-        std::cout << "Calculating energy" << "\n";
         std::vector<std::vector<std::pair<double, double> > > gradient_map = calculate_gradient(luminosity_map);
 
-/*
-        //DEBUG
-        double minval = DBL_MAX;
-        double maxval = -1;
-        for (int i = 0; i < gradient_map.size(); i++) {
-            for (int j = 0; j < gradient_map[i].size(); j++) {
-                double curr = gradient_map[i][j].second;
-                if (curr < minval) minval = curr;
-                if (curr > maxval) maxval = curr;
-            }
-        }
 
-        std::cout << gradient_map.size() << ", " << gradient_map[0].size() << "\n";
-
-        cimg_library::CImg<unsigned char> mono(image.width(), image.height(), 1, 3);
-        for (int i = 0; i < gradient_map.size(); i++) {
-            for (int j = 0; j < gradient_map[0].size(); j++) {
-                double curr = gradient_map[i][j].second;
-                //double scale = (255.0 - 0.0) / (maxval - minval) * (curr - minval) + 0.0;
-                double scale = ((curr - minval) / (maxval - minval)) * (255.0 - 0.0) + 0.0;
-                unsigned char color[3] = {scale, scale, scale};
-                mono.draw_point(j, i, color);
-            }
-        }
-        mono.display();
-        //return 0;
-        //DEBUG END
-
-*/
-
-        std::cout << "Calculating seams" << "\n";
+        double min_seam = DBL_MAX;
+        int loc = -1;
         for (int i = 0; i < gradient_map.back().size(); i++) {
             calculate_seam(gradient_map, gradient_map.size() - 1, i);
+            if (gradient_map.back()[i].first < min_seam) {
+                min_seam = gradient_map.back()[i].first;
+                loc = i;
+            }
         }
 
-        std::cout << "Sorting seams" << "\n";
-        std::vector<std::pair<double, double> > tosort(gradient_map.back().begin(), gradient_map.back().end());
-        sort(tosort.begin(), tosort.end());
+        std::vector<std::pair<int, int> > toremove = trace_seam(gradient_map, loc);
 
-        int index = std::find(gradient_map.back().begin(), gradient_map.back().end(), tosort.front()) - gradient_map.back().begin();
-        
-        for (int i = gradient_map.size() - 1; i >= 0; i--) {
-            im_vec[i].erase(im_vec[i].begin() + index);
-            luminosity_map[i].erase(luminosity_map[i].begin() + index);
-            int loc = -1;
-            double val = DBL_MAX;
-            for (int j = -1; j <= 1; j++) {
-                if (valid_coord(std::pair<double, double>(i - 1, index + j), gradient_map[0].size(), gradient_map.size())) {
-                    if (gradient_map[i - 1][index + j].first < val) {
-                        val = gradient_map[i - 1][index + j].first;
-                        loc = index + j;
-                    }
-                }
-            } 
-            index = loc;
-        } 
+        for (int i = 0; i < toremove.size(); i++) {
+            im_vec[toremove[i].first].erase(im_vec[toremove[i].first].begin() + toremove[i].second);
+            luminosity_map[toremove[i].first].erase(luminosity_map[toremove[i].first].begin() + toremove[i].second);
+        }
     }
 
     cimg_library::CImg<unsigned char> newimage(im_vec[0].size(), im_vec.size(), 1, 3);
@@ -118,29 +76,13 @@ int main(int argc, char** argv) {
         }
     }
 
-    cimg_library::CImgDisplay display(newimage, "Test");
+    cimg_library::CImgDisplay display(newimage, "Seam Carved Image");
+
     while (!display.is_closed()) {
         display.wait();
 
-        image.display(display);
+        newimage.display(display);
     }
-
-    return 0;
-/*
-    std::cout << "Tracing seams" << "\n";
-    for (int i = 0; i < numseam; i++) {
-        trace_seam(image, gradient_map, tosort[i]);
-    }
-
-    std::cout << "Operations concluded, displaying image" << "\n";
-
-    cimg_library::CImgDisplay display(image, "Test");
-    while (!display.is_closed()) {
-        display.wait();
-
-        image.display(display);
-    }
-*/
 }
 
 //pair<double, double> --> current energy seam, gradient value
@@ -162,11 +104,8 @@ double calculate_seam(std::vector<std::vector<std::pair<double, double> > > &gra
 }
 
 //returns list of coordinates of pixels to remove
-std::vector<std::pair<int, int> > trace_seam(cimg_library::CImg<unsigned char> &image,
-                std::vector<std::vector<std::pair<double, double> > > gradient_map,
-                std::pair<double, double> search) {
+std::vector<std::pair<int, int> > trace_seam(std::vector<std::vector<std::pair<double, double> > > gradient_map, int index) {
     std::vector<std::pair<int, int> > toremove;
-    int index = std::find(gradient_map.back().begin(), gradient_map.back().end(), search) - gradient_map.back().begin();
     for (int i = gradient_map.size() - 1; i >= 0; i--) {
         toremove.push_back(std::pair<int, int>(i, index));
         int loc = -1;
