@@ -33,89 +33,103 @@ int main(int argc, char** argv) {
     std::cout << "Calculating luminosity" << "\n";
     std::vector<std::vector<double> > luminosity_map = calculate_luminosity(image);
 
-    std::cout << "Calculating energy" << "\n";
-    std::vector<std::vector<std::pair<double, double> > > gradient_map = calculate_gradient(luminosity_map);
-
-    if (false) { //debug
-        gradient_map.clear();
-        std::vector<std::pair<double, double> > a;
-        a.push_back(std::pair<double, double>(1, 1));
-        a.push_back(std::pair<double, double>(4, 4));
-        a.push_back(std::pair<double, double>(3, 3));
-        a.push_back(std::pair<double, double>(5, 5));
-        a.push_back(std::pair<double, double>(2, 2));
-        gradient_map.push_back(a);
-        a.clear();
-        a.push_back(std::pair<double, double>(DBL_MAX, 3));
-        a.push_back(std::pair<double, double>(DBL_MAX, 2));
-        a.push_back(std::pair<double, double>(DBL_MAX, 5));
-        a.push_back(std::pair<double, double>(DBL_MAX, 2));
-        a.push_back(std::pair<double, double>(DBL_MAX, 3));
-        gradient_map.push_back(a);
-        a.clear();
-        a.push_back(std::pair<double, double>(DBL_MAX, 5));
-        a.push_back(std::pair<double, double>(DBL_MAX, 2));
-        a.push_back(std::pair<double, double>(DBL_MAX, 4));
-        a.push_back(std::pair<double, double>(DBL_MAX, 2));
-        a.push_back(std::pair<double, double>(DBL_MAX, 1));
-        gradient_map.push_back(a);
+    std::vector<std::vector<std::vector<char> > > im_vec;
+    for (int i = 0; i < image.height(); i++) {
+        std::vector<std::vector<char> > row;
+        for (int j = 0; j < image.width(); j++) {
+            std::vector<char> color;
+            color.push_back(image.atXY(i, j, 0, 0));
+            color.push_back(image.atXY(i, j, 0, 1));
+            color.push_back(image.atXY(i, j, 0, 2));
+            row.push_back(color);
+        }
+        im_vec.push_back(row);
     }
 
-    //DEBUG
-    double minval = DBL_MAX;
-    double maxval = -1;
-    for (int i = 0; i < gradient_map.size(); i++) {
-        for (int j = 0; j < gradient_map[i].size(); j++) {
-            double curr = gradient_map[i][j].second;
-            if (curr < minval) minval = curr;
-            if (curr > maxval) maxval = curr;
+    int numseam = 421;
+    for (int master = 0; master < numseam; master++) {
+        std::cout << "=====" << "\n";
+        std::cout << "Iteration: " << master + 1 << "\n";
+
+        std::cout << "Calculating energy" << "\n";
+        std::vector<std::vector<std::pair<double, double> > > gradient_map = calculate_gradient(luminosity_map);
+
+/*
+        //DEBUG
+        double minval = DBL_MAX;
+        double maxval = -1;
+        for (int i = 0; i < gradient_map.size(); i++) {
+            for (int j = 0; j < gradient_map[i].size(); j++) {
+                double curr = gradient_map[i][j].second;
+                if (curr < minval) minval = curr;
+                if (curr > maxval) maxval = curr;
+            }
+        }
+
+        std::cout << gradient_map.size() << ", " << gradient_map[0].size() << "\n";
+
+        cimg_library::CImg<unsigned char> mono(image.width(), image.height(), 1, 3);
+        for (int i = 0; i < gradient_map.size(); i++) {
+            for (int j = 0; j < gradient_map[0].size(); j++) {
+                double curr = gradient_map[i][j].second;
+                //double scale = (255.0 - 0.0) / (maxval - minval) * (curr - minval) + 0.0;
+                double scale = ((curr - minval) / (maxval - minval)) * (255.0 - 0.0) + 0.0;
+                unsigned char color[3] = {scale, scale, scale};
+                mono.draw_point(j, i, color);
+            }
+        }
+        mono.display();
+        //return 0;
+        //DEBUG END
+
+*/
+
+        std::cout << "Calculating seams" << "\n";
+        for (int i = 0; i < gradient_map.back().size(); i++) {
+            calculate_seam(gradient_map, gradient_map.size() - 1, i);
+        }
+
+        std::cout << "Sorting seams" << "\n";
+        std::vector<std::pair<double, double> > tosort = gradient_map.back();
+        sort(tosort.begin(), tosort.end());
+
+        int index = std::find(gradient_map.back().begin(), gradient_map.back().end(), tosort.front()) - gradient_map.back().begin();
+        for (int i = gradient_map.size() - 1; i >= 0; i--) {
+            im_vec[i].erase(im_vec[i].begin() + index);
+            luminosity_map[i].erase(luminosity_map[i].begin() + index);
+            int loc = -1;
+            double val = DBL_MAX;
+            for (int j = -1; j <= 1; j++) {
+                if (valid_coord(std::pair<double, double>(i - 1, index + j), gradient_map[0].size(), gradient_map.size())) {
+                    if (gradient_map[i - 1][index + j].first < val) {
+                        val = gradient_map[i - 1][index + j].first;
+                        loc = index + j;
+                    }
+                }
+            } 
+            index = loc;
+        } 
+    }
+
+    cimg_library::CImg<unsigned char> newimage(im_vec[0].size(), im_vec.size(), 1, 3);
+    for (int i = 0; i < im_vec.size(); i++) {
+        for (int j = 0; j < im_vec[i].size(); j++) {
+            char color[3] = { im_vec[i][j][0], im_vec[i][j][1], im_vec[i][j][2] };
+            newimage.draw_point(j, i, color);
         }
     }
 
-    std::cout << gradient_map.size() << ", " << gradient_map[0].size() << "\n";
-    
-    cimg_library::CImg<unsigned char> mono(image.width(), image.height(), 1, 3);
-    for (int i = 0; i < gradient_map.size(); i++) {
-        for (int j = 0; j < gradient_map[0].size(); j++) {
-            double curr = gradient_map[i][j].second;
-            double scale = (255 - 0) / (maxval - minval) * (curr - minval) + 0;
-            unsigned char color[3] = {scale, scale, scale};
-            mono.draw_point(j, i, 0, color);
-        }
+    cimg_library::CImgDisplay display(newimage, "Test");
+    while (!display.is_closed()) {
+        display.wait();
+
+        image.display(display);
     }
-    mono.display();
+
     return 0;
-    //DEBUG END
-
-    std::cout << "Calculating seams" << "\n";
-    for (int i = 0; i < gradient_map.back().size(); i++) {
-        calculate_seam(gradient_map, gradient_map.size() - 1, i);
-    }
-
-    std::ofstream fout("output.txt");
-    for (int i = 0; i < gradient_map.size(); i++) {
-        for (int j = 0; j < gradient_map[i].size(); j++) {
-            fout << gradient_map[i][j].second << " ";
-        }
-        fout << "\n";
-    }
-    fout.close();
-
-    /*
-    for (int i = 0; i < gradient_map.size(); i++) {
-        for (int j = 0; j < gradient_map[i].size(); j++) {
-            std::cout << gradient_map[i][j].first << " ";
-        }
-        std::cout << "\n";
-    }
-    */
-
-    std::cout << "Sorting seams" << "\n";
-    std::vector<std::pair<double, double> > tosort = gradient_map.back();
-    sort(tosort.begin(), tosort.end());
-
+/*
     std::cout << "Tracing seams" << "\n";
-    for (int i = 0; i < 421; i++) {
+    for (int i = 0; i < numseam; i++) {
         trace_seam(image, gradient_map, tosort[i]);
     }
 
@@ -127,6 +141,7 @@ int main(int argc, char** argv) {
 
         image.display(display);
     }
+*/
 }
 
 //pair<double, double> --> current energy seam, gradient value
@@ -176,7 +191,7 @@ std::vector<std::vector<double> > calculate_luminosity(cimg_library::CImg<unsign
     std::vector<std::vector<double> > luminosity_map(image.height(), std::vector<double>(image.width(), DBL_MAX));
     for (int i = 0; i < image.height(); i++) {
         for (int j = 0; j < image.width(); j++) {
-            luminosity_map[i][j] = luminosity(image.atXY(i, j, 0, 0), image.atXY(i, j, 0, 1), image.atXY(i, j, 0, 2));
+            luminosity_map[i][j] = luminosity(image.atXY(j, i, 0, 0), image.atXY(j, i, 0, 1), image.atXY(j, i, 0, 2));
         }
     }
     return luminosity_map;
