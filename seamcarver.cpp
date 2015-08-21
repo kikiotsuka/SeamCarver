@@ -28,25 +28,41 @@ int main(int argc, char** argv) {
     std::cout << "Loading image" << "\n";
     std::string fname = argv[1];
     cimg_library::CImg<unsigned char> image(fname.c_str());
+    cimg_library::CImg<unsigned char> draw_image(fname.c_str()); //TODO figure out if i can undo the draw without having second copy
 
     std::cout << "Calculating luminosity" << "\n";
     std::vector<std::vector<double> > luminosity_map = calculate_luminosity(image);
 
-    std::vector<std::vector<int> > negative_map(luminosity_map.size(), std::vector<int>(luminosity_map[0].size(), 0));
-    cimg_library::CImgDisplay negative(image, "Set negative energy");
+    std::vector<std::vector<int> > energy_map(luminosity_map.size(), std::vector<int>(luminosity_map[0].size(), 0));
+    cimg_library::CImgDisplay energy(draw_image, "Manually set special energy");
+
+    char red[3] = { 255, 0, 0 };
+    char green[3] = { 0, 255, 0 };
     int cursor_size = 5;
-    while (!negative.is_closed()) {
-        char color[3] = { 255, 0, 0 };
-        negative.wait();
-        if (negative.button()) {
+    while (!energy.is_closed()) {
+        energy.wait();
+        if (energy.button()) {
+            std::vector<char> current_color;
+            int energy_val = 0;
+            if (energy.button() & 1) { // left click
+                current_color = std::vector<char>(red, red + 3);
+                energy_val = -1;
+            } else if (energy.button() & 2) { // right click
+                current_color = std::vector<char>(green, green + 3);
+                energy_val = 1;
+            } else if (energy.button() & 3) { // middle click
+                //todo figure out if you can uncolor image
+                //current_color = ?
+                energy_val = 0; 
+            }
             for (int i = -cursor_size; i <= cursor_size; i++) {
                 for (int j = -cursor_size; j <= cursor_size; j++) {
-                    negative_map[negative.mouse_y() + i][negative.mouse_x() + j] = -1;
-                    image.draw_point(negative.mouse_x() + j, negative.mouse_y() + i, color, 0.8);
+                    energy_map[energy.mouse_y() + i][energy.mouse_x() + j] = energy_val;
+                    draw_image.draw_point(energy.mouse_x() + j, energy.mouse_y() + i, &current_color[0]);
                 }
             }
         }
-        image.display(negative);
+        draw_image.display(energy);
     } 
 
     std::vector<std::vector<std::vector<char> > > im_vec;
@@ -68,11 +84,11 @@ int main(int argc, char** argv) {
 
         std::vector<std::vector<std::pair<double, double> > > gradient_map = calculate_gradient(luminosity_map);
 
-        //set all energies specified in negative to negative on the gradient map
-        for (int i = 0; i < negative_map.size(); i++) {
-            for (int j = 0; j < negative_map[0].size(); j++) {
-                if (negative_map[i][j] < 0) {
-                    gradient_map[i][j].second = -1000;
+        //set all energies specified in energy_map to negative/positive on the gradient map
+        for (int i = 0; i < energy_map.size(); i++) {
+            for (int j = 0; j < energy_map[0].size(); j++) {
+                if (energy_map[i][j] != 0) {
+                    gradient_map[i][j].second = energy_map[i][j] * 1000;
                 }
             }
         }
@@ -87,14 +103,14 @@ int main(int argc, char** argv) {
             }
         }
 
-        //remove seams and negative energy coords, as well as shifting negative energy coords
+        //remove seams and the object manipulation map coordinates
         std::vector<std::pair<int, int> > toremove = trace_seam(gradient_map, loc);
         for (int i = 0; i < toremove.size(); i++) {
             int row = toremove[i].first;
             int col = toremove[i].second;
             im_vec[row].erase(im_vec[row].begin() + col);
             luminosity_map[row].erase(luminosity_map[row].begin() + col);
-            negative_map[row].erase(negative_map[row].begin() + col);
+            energy_map[row].erase(energy_map[row].begin() + col);
         }
     }
 
