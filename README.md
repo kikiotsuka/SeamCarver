@@ -11,4 +11,4 @@ CImg 1.6.3, ImageMagick
 
 # Usage
 
-./seamcarver <path_to_image> <number_of_seams_to_carve>
+./seamcarver path_to_image number_of_seams_to_carve
