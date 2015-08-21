@@ -2,10 +2,12 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <map>
 #include <utility>
 #include <cfloat>
 #include <cmath>
 #include <cstdlib>
+#include <set>
 
 #include "CImg.h"
 
@@ -30,6 +32,23 @@ int main(int argc, char** argv) {
     std::cout << "Calculating luminosity" << "\n";
     std::vector<std::vector<double> > luminosity_map = calculate_luminosity(image);
 
+    std::vector<std::vector<int> > negative_map(luminosity_map.size(), std::vector<int>(luminosity_map[0].size(), 0));
+    cimg_library::CImgDisplay negative(image, "Set negative energy");
+    int cursor_size = 5;
+    while (!negative.is_closed()) {
+        char color[3] = { 255, 0, 0 };
+        negative.wait();
+        if (negative.button()) {
+            for (int i = -cursor_size; i <= cursor_size; i++) {
+                for (int j = -cursor_size; j <= cursor_size; j++) {
+                    negative_map[negative.mouse_y() + i][negative.mouse_x() + j] = -1;
+                    image.draw_point(negative.mouse_x() + j, negative.mouse_y() + i, color, 0.8);
+                }
+            }
+        }
+        image.display(negative);
+    } 
+
     std::vector<std::vector<std::vector<char> > > im_vec;
     for (int i = 0; i < image.height(); i++) {
         std::vector<std::vector<char> > row;
@@ -45,10 +64,18 @@ int main(int argc, char** argv) {
 
     int numseam = atoi(argv[2]);
     for (int master = 0; master < numseam; master++) {
-        std::cout << "Computing and removing seam #" << master + 1 << "\n";
+        std::cout << "Computing and removing seam #" << master + 1 << "\r" << std::flush;
 
         std::vector<std::vector<std::pair<double, double> > > gradient_map = calculate_gradient(luminosity_map);
 
+        //set all energies specified in negative to negative on the gradient map
+        for (int i = 0; i < negative_map.size(); i++) {
+            for (int j = 0; j < negative_map[0].size(); j++) {
+                if (negative_map[i][j] < 0) {
+                    gradient_map[i][j].second = -1000;
+                }
+            }
+        }
 
         double min_seam = DBL_MAX;
         int loc = -1;
@@ -60,11 +87,14 @@ int main(int argc, char** argv) {
             }
         }
 
+        //remove seams and negative energy coords, as well as shifting negative energy coords
         std::vector<std::pair<int, int> > toremove = trace_seam(gradient_map, loc);
-
         for (int i = 0; i < toremove.size(); i++) {
-            im_vec[toremove[i].first].erase(im_vec[toremove[i].first].begin() + toremove[i].second);
-            luminosity_map[toremove[i].first].erase(luminosity_map[toremove[i].first].begin() + toremove[i].second);
+            int row = toremove[i].first;
+            int col = toremove[i].second;
+            im_vec[row].erase(im_vec[row].begin() + col);
+            luminosity_map[row].erase(luminosity_map[row].begin() + col);
+            negative_map[row].erase(negative_map[row].begin() + col);
         }
     }
 
@@ -75,6 +105,8 @@ int main(int argc, char** argv) {
             newimage.draw_point(j, i, color);
         }
     }
+
+    std::cout << "\n" << "Computation finished, displaying image" << "\n"; 
 
     cimg_library::CImgDisplay display(newimage, "Seam Carved Image");
 

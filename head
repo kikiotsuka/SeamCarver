@@ -1,0 +1,2 @@
+g++ *.cpp -o seamcarver -O2 -L/usr/X11R6/lib -lm -lpthread -lX11
+makefile:2: recipe for target 'seamcaver' failed
