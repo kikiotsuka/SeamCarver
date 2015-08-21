@@ -20,8 +20,9 @@ double calculate_seam(std::vector<std::vector<std::pair<double, double> > > &gra
 std::vector<std::pair<int, int> > trace_seam(std::vector<std::vector<std::pair<double, double> > > gradient_map, int index);
 
 int main(int argc, char** argv) {
-    if (argc < 3) {
+    if (argc < 2) {
         std::cout << "Not enough arguments, Usage: ./seamcarver <path_to_image> <number_of_seams_to_carve>" << "\n";
+        std::cout << "If number of seams to carve is left out, the necessary size for object removal will be used instead" << "\n";
         return 1;
     }
 
@@ -64,7 +65,11 @@ int main(int argc, char** argv) {
         }
         draw_image.display(energy);
     } 
+    //TODO implement flood fill above so user draws a perimeter and simply floodfills it with color
+    //TODO figure out how to do user input for the above implementation
 
+    //TODO
+    //change so im_vec stores only pairs of coords, then we copy directly from image to new image?
     std::vector<std::vector<std::vector<char> > > im_vec;
     for (int i = 0; i < image.height(); i++) {
         std::vector<std::vector<char> > row;
@@ -78,7 +83,27 @@ int main(int argc, char** argv) {
         im_vec.push_back(row);
     }
 
-    int numseam = atoi(argv[2]);
+    int numseam = 0;
+
+    if (argc < 3) { // calculate max of max range of x on all y coordinates
+        int maxseam = -1;
+        for (int i = 0; i < energy_map.size(); i++) {
+            int left = 0;
+            int right = energy_map[i].size() - 1;
+            while (energy_map[i][left] == 0 || energy_map[i][right] == 0) {
+                if (energy_map[i][left] == 0) left++;
+                if (energy_map[i][right] == 0) right--;
+            }
+            int diff = right - left + 1;
+            if (maxseam < diff) {
+                maxseam = diff;
+            }
+        }
+        numseam = maxseam;
+    } else {
+        numseam = atoi(argv[2]);
+    }
+
     for (int master = 0; master < numseam; master++) {
         std::cout << "Computing and removing seam #" << master + 1 << "\r" << std::flush;
 
