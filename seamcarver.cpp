@@ -14,6 +14,7 @@
 double luminosity(int r, int g, int b);
 double pythagorean(double a, double b);
 bool valid_coord(std::pair<int, int> coord, int width, int height);
+void flood(cimg_library::CImg<unsigned char> &draw_image, std::vector<std::vector<int> > &energy_map, char *color, int val, int x, int y);
 std::vector<std::vector<double> > calculate_luminosity(cimg_library::CImg<unsigned char> &image);
 std::vector<std::vector<std::pair<double, double> > > calculate_gradient(std::vector<std::vector<double> > luminosity_map);
 double calculate_seam(std::vector<std::vector<std::pair<double, double> > > &gradient_map, int x, int y);
@@ -34,39 +35,48 @@ int main(int argc, char** argv) {
     std::cout << "Calculating luminosity" << "\n";
     std::vector<std::vector<double> > luminosity_map = calculate_luminosity(image);
 
+    std::cout << "Setting energy of image" << "\n";
     std::vector<std::vector<int> > energy_map(luminosity_map.size(), std::vector<int>(luminosity_map[0].size(), 0));
     cimg_library::CImgDisplay energy(draw_image, "Manually set special energy");
 
     char red[3] = { 255, 0, 0 };
     char green[3] = { 0, 255, 0 };
-    int cursor_size = 5;
+    int cursor_size = 1;
     while (!energy.is_closed()) {
         energy.wait();
         if (energy.button()) {
             std::vector<char> current_color;
             int energy_val = 0;
             if (energy.button() & 1) { // left click
-                current_color = std::vector<char>(red, red + 3);
-                energy_val = -1;
+                if (energy.is_keySPACE()) {
+                    flood(draw_image, energy_map, red, -1, energy.mouse_y(), energy.mouse_x());
+                    energy_val = -2;
+                } else {
+                    current_color = std::vector<char>(red, red + 3);
+                    energy_val = -1;
+                }
             } else if (energy.button() & 2) { // right click
-                current_color = std::vector<char>(green, green + 3);
-                energy_val = 1;
-            } else if (energy.button() & 3) { // middle click
-                //todo figure out if you can uncolor image
-                //current_color = ?
-                energy_val = 0; 
+                if (energy.is_keySPACE()) {
+                    flood(draw_image, energy_map, green, 1, energy.mouse_y(), energy.mouse_x());
+                    energy_val = -2;
+                } else {
+                    current_color = std::vector<char>(green, green + 3);
+                    energy_val = 1;
+                }
             }
-            for (int i = -cursor_size; i <= cursor_size; i++) {
-                for (int j = -cursor_size; j <= cursor_size; j++) {
-                    energy_map[energy.mouse_y() + i][energy.mouse_x() + j] = energy_val;
-                    draw_image.draw_point(energy.mouse_x() + j, energy.mouse_y() + i, &current_color[0]);
+            if (energy_val != -2) {
+                for (int i = -cursor_size; i <= cursor_size; i++) {
+                    for (int j = -cursor_size; j <= cursor_size; j++) {
+                        if (valid_coord(std::pair<int, int>(energy.mouse_y() + i, energy.mouse_x() + j), energy_map[0].size(), energy_map.size())) {
+                            energy_map[energy.mouse_y() + i][energy.mouse_x() + j] = energy_val;
+                            draw_image.draw_point(energy.mouse_x() + j, energy.mouse_y() + i, &current_color[0]);
+                        }
+                    }
                 }
             }
         }
         draw_image.display(energy);
     } 
-    //TODO implement flood fill above so user draws a perimeter and simply floodfills it with color
-    //TODO figure out how to do user input for the above implementation
 
     //TODO
     //change so im_vec stores only pairs of coords, then we copy directly from image to new image?
@@ -90,9 +100,9 @@ int main(int argc, char** argv) {
         for (int i = 0; i < energy_map.size(); i++) {
             int left = 0;
             int right = energy_map[i].size() - 1;
-            while (energy_map[i][left] == 0 || energy_map[i][right] == 0) {
-                if (energy_map[i][left] == 0) left++;
-                if (energy_map[i][right] == 0) right--;
+            while (right > 0 && left < energy_map[i].size() && (energy_map[i][left] != -1 || energy_map[i][right] != -1)) {
+                if (energy_map[i][left] != -1) left++;
+                if (energy_map[i][right] != -1) right--;
             }
             int diff = right - left + 1;
             if (maxseam < diff) {
@@ -153,9 +163,22 @@ int main(int argc, char** argv) {
 
     while (!display.is_closed()) {
         display.wait();
-
+        
         newimage.display(display);
     }
+}
+
+void flood(cimg_library::CImg<unsigned char> &draw_image, std::vector<std::vector<int> > &energy_map, char *color, int val, int x, int y) {
+    if (!valid_coord(std::pair<int, int>(x, y), energy_map[0].size(), energy_map.size())) return;
+    if (energy_map[x][y] == val) return;
+
+    draw_image.draw_point(y, x, color);
+    energy_map[x][y] = val;
+
+    flood(draw_image, energy_map, color, val, x - 1, y); 
+    flood(draw_image, energy_map, color, val, x + 1, y); 
+    flood(draw_image, energy_map, color, val, x, y - 1); 
+    flood(draw_image, energy_map, color, val, x, y + 1); 
 }
 
 //pair<double, double> --> current energy seam, gradient value
